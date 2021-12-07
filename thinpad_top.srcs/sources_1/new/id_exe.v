@@ -23,6 +23,7 @@ module id_exe(
     input wire[2:0]               id_csr_op,
     input wire[31:0]              id_csr_rs1,
     input wire[31:0]              id_pc,
+    input wire					  id_page_fault_if,
 	
 	// provide for exee
 	output reg[4:0]               exe_alu_op,
@@ -37,7 +38,8 @@ module id_exe(
     output reg[11:0]              exe_csr_waddr,
     output reg[2:0]               exe_csr_op,
     output reg[31:0]              exe_csr_rs1,
-    output reg[31:0]              exe_pc
+    output reg[31:0]              exe_pc,
+    output reg 					  exe_page_fault_if
 );
 
 	always @ (posedge clock or posedge reset) begin
@@ -56,6 +58,7 @@ module id_exe(
 			exe_csr_op <= `FUNC_CSRRW;
 			exe_csr_rs1 <= 32'b0;
 			exe_pc <= 32'b0;
+			exe_page_fault_if <= 0;
 
 		end else if(cs_taken || (stall[2] == 1'b1 && stall[3] == 1'b0)) begin  
 			exe_alu_op <= `ALU_NOP;
@@ -71,6 +74,7 @@ module id_exe(
 			exe_csr_op <= `FUNC_CSRRW;
 			exe_csr_rs1 <= 32'b0;
 			exe_pc <= 32'b0;
+			exe_page_fault_if <= 0;
 		end else if(stall[2] == 1'b0) begin  
 			exe_alu_op <= id_alu_op;
             exe_alu_A <= id_alu_A;
@@ -86,6 +90,7 @@ module id_exe(
 			exe_csr_op <= id_csr_op;
 			exe_csr_rs1 <= id_csr_rs1;
 			exe_pc <= id_pc;
+			exe_page_fault_if <= id_page_fault_if;
         end
 	end
 	

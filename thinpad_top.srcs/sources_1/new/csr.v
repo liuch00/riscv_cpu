@@ -15,6 +15,7 @@ module csr(
     output reg[31:0] mepc,
     output reg[31:0] mcause,
     output reg[31:0] mip,
+    output reg[31:0] satp,
     
     // seletion write
     input wire selection_we,  // 1 is enable
@@ -30,6 +31,7 @@ module csr(
     input wire[31:0] mepc_i,
     input wire[31:0] mcause_i,
     input wire[31:0] mip_i,
+    input wire[31:0] satp_i,
     
     // exception output
     output reg csr_addr_expcetion  // this can cause "illegal instruction exception"
@@ -47,6 +49,7 @@ if (reset) begin
     mepc <= 32'b0;
     mcause <= 32'b0;
     mip <= 32'b0;
+    satp <= 32'b0;
     csr_addr_expcetion <= 0;
 end
 
@@ -59,6 +62,7 @@ else if (direct_we) begin
     mepc <= mepc_i;
     mcause <= mcause_i;
     mip <= mip_i;
+    satp <= satp_i;
 end
 
 // selection write
@@ -71,6 +75,7 @@ else if (selection_we) begin
         12'h341: mepc <= wdata;
         12'h342: mcause <= wdata;
         12'h344: mip <= wdata;
+        12'h180: satp <= wdata;
         default: csr_addr_expcetion <= 1;
     endcase
 end
@@ -90,6 +95,7 @@ always @ (*) begin
         12'h341: wdata_ready = mepc;
         12'h342: wdata_ready = mcause;
         12'h344: wdata_ready = mip;
+        12'h180: wdata_ready = satp;
         default: begin
             wdata_ready = 32'b0;
         end

@@ -9,6 +9,7 @@ module mem_wb (
 	input wire[4:0]       mem_rd,
 	input wire            mem_wreg,
 	input wire[31:0]      mem_wdata,
+	input wire			  page_fault_load,
 
     
     output reg[4:0]        wb_rd,
@@ -26,7 +27,7 @@ module mem_wb (
 		    wb_wdata <= 32'b0;	
 		end else if(stall[4] == 1'b0) begin
 			wb_rd <= mem_rd;
-			wb_wreg <= mem_wreg;
+			wb_wreg <= mem_wreg & (~page_fault_load);
 			wb_wdata <= mem_wdata;		
 		end    
 	end      

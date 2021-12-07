@@ -93,8 +93,8 @@ wire[7:0] vga;
 vga #(12, 800, 856, 976, 1040, 600, 637, 643, 666, 1, 1) vga800x600at75 (
     .clk(clk_50M), 
     .reset(reset_btn),
-    .hdata(hdata), //横坐�????
-    .vdata(vdata),      //纵坐�????
+    .hdata(hdata), //横坐�???????
+    .vdata(vdata),      //纵坐�???????
     .hsync(video_hsync),
     .vsync(video_vsync),
     .data_enable(video_de)
@@ -159,7 +159,7 @@ wire [31:0] id_pc_branch_target;
 
 //if-pc module
 if_pc IF_PC(
-    .clock(clk_50M),
+    .clock(clk_10M),
     .reset(reset_btn),
     .pc_branch_flag(id_pc_branch_flag),
     .pc_branch_target(id_pc_branch_target),
@@ -190,15 +190,17 @@ wire [31:0] if_id_pc;
 wire [31:0] if_id_instr;
 //if-id module
 if_id IF_ID(
-    .clock(clk_50M),
+    .clock(clk_10M),
     .reset(reset_btn),
     .stall(stall),
     .cs_taken(context_switch_by_exception),
     .instr_from_ram(sram_uart_data),
+    .page_fault_if(mem_page_fault_if),
     .pc_from_if(if_pc),
     .if_id_instr(if_id_instr),
     .if_id_pc(if_id_pc),
-    .pc_accept(pc_accept_w)
+    .pc_accept(pc_accept_w),
+    .page_fault_if_o(id_page_fault_if)
     );
 //ID stage
 wire[31:0] data1_from_reg;
@@ -222,6 +224,8 @@ wire[31:0] id_csr_rs1;
 wire id_instr_is_load;
 wire exe_instr_is_load;
 
+wire id_page_fault_if;
+
 
 
 //regfile
@@ -231,7 +235,7 @@ wire [31:0] mem_wb_reg_w_data;
 
 
 regfile REG_FILE(
-    .clk(clk_50M),
+    .clk(clk_10M),
     .rst(reset_btn),
     .raddr1(id_reg_addr1),
     .raddr2(id_reg_addr2),
@@ -252,6 +256,7 @@ wire[31:0] csr_mscratch_o;
 wire[31:0] csr_mepc_o;
 wire[31:0] csr_mcause_o;
 wire[31:0] csr_mip_o;
+wire[31:0] csr_satp_o;
 
 wire csr_selection_we;
 wire[11:0] csr_waddr;
@@ -264,9 +269,10 @@ wire[31:0] csr_mscratch_i;
 wire[31:0] csr_mepc_i;
 wire[31:0] csr_mcause_i;
 wire[31:0] csr_mip_i;
+wire[31:0] csr_satp_i;
 
 csr CSR(
-    .clock(clk_50M),
+    .clock(clk_10M),
     .reset(reset_btn),
     // selection read
     .raddr(csr_raddr),  // address of register to read
@@ -279,6 +285,7 @@ csr CSR(
     .mepc(csr_mepc_o),
     .mcause(csr_mcause_o),
     .mip(csr_mip_o),
+    .satp(csr_satp_o),
     // seletion write
     .selection_we(csr_selection_we),  // 1 is enable
     .waddr(csr_waddr),
@@ -292,6 +299,7 @@ csr CSR(
     .mepc_i(csr_mepc_i),
     .mcause_i(csr_mcause_i),
     .mip_i(csr_mip_i),
+    .satp_i(csr_satp_i),
     // exception output
     .csr_addr_expcetion()  // this can cause "illegal instruction exception"
 );
@@ -306,7 +314,7 @@ wire[31:0] mem_w_data;
 
 //id module
 id ID(
-    .clk(clk_50M),
+    .clk(clk_10M),
     .reset(reset_btn),
 
    .if_id_pc(if_id_pc),
@@ -364,7 +372,7 @@ wire[31:0] id_exe_reg_data2;
 wire[31:0] id_exe_pc;
 
 id_exe ID_EX(
-    .clock(clk_50M),
+    .clock(clk_10M),
     .reset(reset_btn),
     .stall(stall),
     .cs_taken(context_switch_by_exception),
@@ -381,6 +389,7 @@ id_exe ID_EX(
     .id_csr_op(id_csr_op),
     .id_csr_rs1(id_csr_rs1),
     .id_pc(if_id_pc),
+    .id_page_fault_if(id_page_fault_if),
 
     .exe_alu_op(id_exe_alu_op),
     .exe_alu_A(id_exe_alu_A),
@@ -394,7 +403,8 @@ id_exe ID_EX(
     .exe_csr_waddr(exe_csr_waddr),
     .exe_csr_op(exe_csr_op),
     .exe_csr_rs1(exe_csr_rs1),
-    .exe_pc(id_exe_pc)
+    .exe_pc(id_exe_pc),
+    .exe_page_fault_if(exe_page_fault_if)
 );
 //EXE stage
 wire[4:0] id_exe_alu_op;
@@ -410,6 +420,8 @@ wire [31:0] exe_reg_data2;
 wire [4:0] exe_alu_op;
 wire [31:0] exe_sram_addr;
 wire [31:0] exe_reg_wdata;
+
+wire exe_page_fault_if;
 
 
 exe EXE(
@@ -444,6 +456,8 @@ wire exe_csr_we;
 wire[31:0] exe_csr_rs1;
 wire[11:0] exe_csr_waddr;
 wire[2:0] exe_csr_op;
+wire[1:0] mode;
+wire[1:0] mode_comb;
 
 wire context_switch_by_exception;
 wire[31:0] cs_target;
@@ -452,8 +466,10 @@ wire[63:0] mtime;
 wire[63:0] mtimecmp;
 
 exceptionHandler ExceptionHandler(
-    .clock(clk_50M),
+    .clock(clk_10M),
     .reset(reset_btn),
+    .mode(mode),
+    .mode_comb(mode_comb),
 
     .mstatus_i(csr_mstatus_o),
     .mie_i(csr_mie_o),
@@ -462,6 +478,7 @@ exceptionHandler ExceptionHandler(
     .mepc_i(csr_mepc_o),
     .mcause_i(csr_mcause_o),
     .mip_i(csr_mip_o),
+    .satp_i(csr_satp_o),
     
     .direct_we(csr_direct_we),
     .mstatus_o(csr_mstatus_i),
@@ -471,6 +488,7 @@ exceptionHandler ExceptionHandler(
     .mepc_o(csr_mepc_i),
     .mcause_o(csr_mcause_i),
     .mip_o(csr_mip_i),
+    .satp_o(csr_satp_i),
     
     .selection_we(csr_selection_we),
     .csr_wdata(csr_wdata),
@@ -482,20 +500,21 @@ exceptionHandler ExceptionHandler(
     .exe_waddr(exe_csr_waddr),
     .csr_op(exe_csr_op),
     
+    .if_page_fault_if(exe_page_fault_if),
     .exe_call_break_ret(exe_call_break_ret),
     .mem_store_access(exp_mem_store_access),
     .mem_load_access(exp_mem_load_access),
+    .mem_page_fault_load(mem_page_fault_load),
+    .mem_page_fault_store(mem_page_fault_store),
     
     .context_switch_by_exception(context_switch_by_exception),
     .cs_target(cs_target),
     
     .pc_exe(id_exe_pc),
-    /*
-    .mode(mode),
-    .mode_o(mode_i),
-    .mode_we(mode_we),*/
+    .pc_mem(exe_mem_pc),
     .mtime(mtime),
-    .mtimecmp(mtimecmp)
+    .mtimecmp(mtimecmp),
+    .stall(stall)
 );
 
 
@@ -505,9 +524,10 @@ wire [31:0] exe_mem_reg_data2;
 wire [4:0] exe_mem_alu_op;
 wire[31:0] exe_mem_wdata;
 wire[31:0] exe_mem_addr;
+wire[31:0] exe_mem_pc;
 
 exe_mem EXE_MEM(
-    .clk(clk_50M),
+    .clk(clk_10M),
     .rst(reset_btn),
     .stall(stall),
     .exe_wdata_i(exe_reg_wdata),
@@ -516,13 +536,15 @@ exe_mem EXE_MEM(
     .exe_reg_data2_i(exe_reg_data2),
     .exe_alu_op(exe_alu_op),
     .ex_addr_i(exe_sram_addr),
+    .exe_pc(id_exe_pc),
 
     .mem_rd_o(exe_mem_rd),
     .mem_wreg_o(exe_mem_w_enable),
     .mem_reg_data2_o(exe_mem_reg_data2),
     .mem_alu_op_o(exe_mem_alu_op),
     .mem_wdata_o(exe_mem_wdata),
-    .mem_addr_o(exe_mem_addr)
+    .mem_addr_o(exe_mem_addr),
+    .mem_pc(exe_mem_pc)
     );
 //mem stage
 
@@ -557,7 +579,7 @@ mem MEM(
 
 
 mem_wb MEM_WB (
-    .clk(clk_50M),
+    .clk(clk_10M),
     .rst(reset_btn),
 
     .stall(stall),
@@ -565,6 +587,7 @@ mem_wb MEM_WB (
     .mem_rd(mem_w_addr),
     .mem_wreg(mem_w_enable),
     .mem_wdata(mem_w_data),
+    .page_fault_load(mem_page_fault_load),
 
     .wb_rd(mem_wb_reg_w_addr),
     .wb_wreg(mem_wb_reg_w_enable),
@@ -575,9 +598,14 @@ mem_wb MEM_WB (
 wire[31:0] sram_uart_data;
 wire if_stall;
 wire mem_stall;
+wire mem_page_fault_load;
+wire mem_page_fault_store;
+wire mem_page_fault_if;
 sram_uart SRAM_UART (
-    .clk(clk_50M),
+    .clk(clk_10M),
     .reset(reset_btn),
+    .csr_satp(csr_satp_o),
+    .exec_mode(mode),
     .mem_stall(mem_stall),
     .vga(vga),
     .pc(if_pc),
@@ -588,6 +616,8 @@ sram_uart SRAM_UART (
     .mem_read_or_write(mem_ram_read),
     .mem_write_data(mem_data_to_sram),
     .mem_read_data(sram_uart_data),
+    .context_switch(context_switch_by_exception),
+    .cs_target(cs_target),
     
     .uart_dataready(uart_dataready),
     .uart_tbre(uart_tbre),
@@ -616,7 +646,11 @@ sram_uart SRAM_UART (
     .dina(dina),
     
     .mtime(mtime),
-    .mtimecmp(mtimecmp)
+    .mtimecmp(mtimecmp),
+
+    .page_fault_load(mem_page_fault_load),
+    .page_fault_store(mem_page_fault_store),
+    .page_fault_if(mem_page_fault_if)
 );
 ctrl CTRL(
     .rst(reset_btn),
@@ -635,12 +669,12 @@ wire enb;
 wire[16:0] addrb;
 wire[7:0] doutb;
 blk_mem_gen_0 blk(
-    .clka(clk_50M),
+    .clka(clk_10M),
     .ena(ena),
     .wea(wea),
     .addra(addra),
     .dina(dina),
-    .clkb(clk_50M),
+    .clkb(clk_10M),
     .enb(enb),
     .addrb(addrb),
     .doutb(doutb)
